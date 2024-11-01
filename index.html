@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+   <meta charset="UTF-8">
+   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+   <title>index Web AR Example with Custom Marker</title>
+   <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
+   <script src="https://cdn.rawgit.com/jeromeetienne/AR.js/1.7.2/aframe/build/aframe-ar.min.js"></script>
+   <style>
+      #button {
+         position: absolute;
+         bottom: 400px;
+         right: 20px;
+         padding: 10px 20px;
+         background-color: #007bff;
+         color: white;
+         border: none;
+         border-radius: 5px;
+         display: none;
+         cursor: pointer;
+         font-size: 16px;
+      }
+   </style>
+</head>
+<body style="margin: 0; overflow: hidden;">
+   <a-scene embedded arjs>
+      <!-- Menggunakan marker Hiro -->
+      <a-marker preset="hiro" id="hiro-marker">
+         <!-- Memuat model 3D (contoh dalam format GLTF) -->
+         <a-entity id="model" gltf-model="scene.gltf" scale="0.5 0.5 0.5" position="0 0 0"></a-entity>
+      </a-marker>
+
+      <!-- Model 3D yang akan ditampilkan setelah tombol diklik -->
+      <a-entity id="locked-model" gltf-model="scene.gltf" scale="0.1 0.1 0.1" position="0 0 0" visible="false" rotation="0 90 0" class="interactable">
+         <a-sphere id="hotspot1" position="0 4.85 0" radius="0.05" color="blue" class="interactable"></a-sphere>
+         <a-sphere id="hotspot2" position="0 2.97 0" radius="0.05" color="blue" class="interactable"></a-sphere>
+      </a-entity>
+      
+      <!-- Menambahkan kamera AR.js -->
+      <a-entity camera></a-entity>
+   </a-scene>
+
+   <!-- Tombol yang akan muncul saat marker terbaca -->
+   <button id="button" onclick="handleButtonClick()">Kunci</button>
+
+   <!-- Menambahkan elemen audio -->
+   <audio id="background-audio" src="audio.mp3" type="audio/mpeg"></audio>
+
+   <script>
+      const marker = document.querySelector("#hiro-marker");
+      const button = document.getElementById("button");
+      const lockedModel = document.querySelector("#locked-model");
+      const audio = document.getElementById("background-audio"); // Mendapatkan elemen audio
+      let isLocked = false;
+      let scaleFactor = 1;
+      let isDragging = false;
+      let previousMousePosition = { x: 0, y: 0 };
+
+      // Menampilkan tombol dan memulai audio saat marker ditemukan
+      marker.addEventListener("markerFound", () => {
+         button.style.display = "block"; // Menampilkan tombol
+         audio.play(); // Memulai audio
+         audio.loop = true; // Mengatur audio agar tetap loop
+      });
+
+      // Menyembunyikan tombol saat marker hilang
+      marker.addEventListener("markerLost", () => {
+         button.style.display = "none"; // Menyembunyikan tombol
+         if (!isLocked) {
+            audio.pause(); // Menghentikan audio jika model belum dikunci
+            audio.currentTime = 0; // Reset audio ke awal
+         }
+      });
+
+      function handleButtonClick() {
+         if (!isLocked) {
+            lockedModel.setAttribute("visible", "true");
+            lockedModel.setAttribute("position", { x: 0, y: -0.2, z: -2 });
+            alert("Tombol diklik! Model terkunci dan ditampilkan.");
+
+            marker.setAttribute('visible', 'false');
+            button.style.display = "none";
+         } else {
+            lockedModel.setAttribute("visible", "false");
+            alert("Model kembali ke posisi awal.");
+            marker.setAttribute('visible', 'true');
+            button.style.display = "none";
+         }
+
+         isLocked = !isLocked;
+      }
+
+      // Fungsi untuk mengubah warna hotspot saat diklik
+      function changeHotspotColor(hotspot) {
+         const currentColor = hotspot.getAttribute('color');
+         hotspot.setAttribute('color', currentColor === 'blue' ? 'red' : 'blue');
+      }
+
+      // Event listener untuk hotspot
+      document.querySelector("#hotspot1").addEventListener("click", () => {
+         changeHotspotColor(document.querySelector("#hotspot1"));
+      });
+      document.querySelector("#hotspot2").addEventListener("click", () => {
+         changeHotspotColor(document.querySelector("#hotspot2"));
+      });
+
+      // Drag functionality
+      window.addEventListener('mousedown', (event) => {
+         if (isLocked) {
+            isDragging = true;
+            previousMousePosition = { x: event.clientX, y: event.clientY };
+         }
+      });
+
+      window.addEventListener('mousemove', (event) => {
+         if (isDragging && isLocked) {
+            const deltaX = event.clientX - previousMousePosition.x;
+            const deltaY = event.clientY - previousMousePosition.y;
+            const model = document.querySelector('#locked-model');
+            let currentRotation = model.getAttribute('rotation');
+            model.setAttribute('rotation', {
+               x: currentRotation.x - deltaY * 0.2,
+               y: currentRotation.y + deltaX * 0.2,
+               z: currentRotation.z
+            });
+            previousMousePosition = { x: event.clientX, y: event.clientY };
+         }
+      });
+
+      window.addEventListener('mouseup', () => {
+         isDragging = false;
+      });
+
+      // Zoom functionality
+      window.addEventListener('wheel', (event) => {
+         if (isLocked) {
+            event.preventDefault();
+            scaleFactor += event.deltaY * -0.01;
+            scaleFactor = Math.min(Math.max(0.1, scaleFactor), 3);
+
+            const model = document.querySelector('#locked-model');
+            model.setAttribute('scale', { x: scaleFactor, y: scaleFactor, z: scaleFactor });
+         }
+      });
+
+      // Touch events for mobile drag and zoom
+      let lastTouchY = 0;
+      window.addEventListener('touchstart', (event) => {
+         if (isLocked) {
+            lastTouchY = event.touches[0].clientY;
+         }
+      });
+
+      window.addEventListener('touchmove', (event) => {
+         if (isLocked) {
+            const touchY = event.touches[0].clientY;
+            const scaleChange = (touchY > lastTouchY) ? 1.02 : 0.98;
+            scaleFactor *= scaleChange;
+            scaleFactor = Math.min(Math.max(0.1, scaleFactor), 3);
+
+            const model = document.querySelector('#locked-model');
+            model.setAttribute('scale', { x: scaleFactor, y: scaleFactor, z: scaleFactor });
+            lastTouchY = touchY;
+         }
+      });
+
+   </script>
+</body>
+</html>
